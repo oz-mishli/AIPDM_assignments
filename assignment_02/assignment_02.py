@@ -57,8 +57,8 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.9, wit
 
             if with_eligibilty_traces:
                 E[curr_state, action] += 1
-                Q[curr_state, action] = old_q_val + curr_alpha * delta * lambda_value * E[curr_state, action]
-                E *= gamma
+                Q[curr_state, action] = old_q_val + curr_alpha * delta * E[curr_state, action]
+                E *= lambda_value * gamma
             else:
                 Q[curr_state, action] = old_q_val + curr_alpha * delta
 
