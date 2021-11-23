@@ -15,26 +15,39 @@ MAX_EPISODES = 10000
 NUM_SIMULATIONS = 8 * 8 * 4
 STEPS_FOR_TEST = 10000
 EPSILON_DECAY = 1e-6
-ALPHA_DECAY = 1e-8
-MIN_EPSILON = 0.001
+MIN_EPSILON = 0.05
 
 
+# Good values for Q-learning
+# alpha=0.03
+# epsilon=0.995
+# EPSILON_DECAY = 1e-6
+# MIN_EPSILON = 0.05
+
+# Good values for Q-learning with eligibility traces
 # alpha = 0.03
-def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.9, with_eligibilty_traces=False):
+# epsilon=0.995
+# lambda_value=0.1
+# EPSILON_DECAY = 1e-6
+# MIN_EPSILON = 0.05
+
+
+def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, with_eligibilty_traces=False):
     # Random init
     rng = np.random.default_rng()
 
-    # Initialize Q(s, a) to zeros
     n_states = env.observation_space.n
     n_actions = env.action_space.n
-    # Q = np.zeros((n_states, n_actions), dtype=float)
+
+    # Init Q to small random values uniformly distributed
     Q = rng.uniform(0, 0.001, (n_states, n_actions))
+
+    # Init E to zeros
     E = np.zeros((n_states, n_actions))
     total_steps = 0
     num_episodes = 0
     tests_counter = 1
     curr_epsilon = epsilon
-    curr_alpha = alpha
     init_state_values = []
 
     while total_steps < MAX_TOTAL_STEPS:
@@ -57,10 +70,10 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.9, wit
 
             if with_eligibilty_traces:
                 E[curr_state, action] += 1
-                Q[curr_state, action] = old_q_val + curr_alpha * delta * E[curr_state, action]
+                Q[curr_state, action] = old_q_val + alpha * delta * E[curr_state, action]
                 E *= lambda_value * gamma
             else:
-                Q[curr_state, action] = old_q_val + curr_alpha * delta
+                Q[curr_state, action] = old_q_val + alpha * delta
 
             total_rewards += reward
 
@@ -77,14 +90,14 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.9, wit
             tests_counter += 1
             mean_reward = simulate_policy(env, Q)
             init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
-            print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon} alpha={curr_alpha}')
+            print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon}')
 
-        # Update exploration with exponential decay TBD (epsilon GLIE)
+        # Update exploration with exponential decay
         # curr_epsilon = epsilon * np.exp(-EPSILON_DECAY * num_episodes)
-        curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps * 1.5, MIN_EPSILON])
-        curr_alpha = alpha - ALPHA_DECAY * total_steps
+        curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps, MIN_EPSILON])
 
-    print(Q)
+
+    #print(Q)
     print(f'Total steps = {total_steps}')
 
     return np.array(init_state_values)
