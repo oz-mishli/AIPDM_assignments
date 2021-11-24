@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 from matplotlib import pyplot as plt
+from typing import List
 
 # Constants
 NUM_STATES = 8 * 8
@@ -16,6 +17,13 @@ NUM_SIMULATIONS = 8 * 8 * 4
 STEPS_FOR_TEST = 10000
 EPSILON_DECAY = 1e-6
 MIN_EPSILON = 0.05
+
+ACTION_NAME_MAPPING = {
+    0: 'move_left',
+    1: 'move_down',
+    2: 'move_right',
+    3: 'move_up'
+}
 
 
 # Good values for Q-learning
@@ -88,7 +96,7 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
         # Simulate current policy
         if total_steps > STEPS_FOR_TEST * tests_counter:
             tests_counter += 1
-            mean_reward = simulate_policy(env, Q)
+            mean_reward = simulate_policy(env, Q, verbose=True, render=True)
             init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
             print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon}')
 
@@ -96,8 +104,7 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
         # curr_epsilon = epsilon * np.exp(-EPSILON_DECAY * num_episodes)
         curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps, MIN_EPSILON])
 
-
-    #print(Q)
+    # print(Q)
     print(f'Total steps = {total_steps}')
 
     return np.array(init_state_values)
@@ -106,7 +113,7 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
 def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=False):
     total_rewards = 0
     for i in range(num_trials):
-
+        steps_data = list()
         ep_reward = 0
         steps = 0
         curr_state = env.reset()
@@ -117,11 +124,17 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
 
             next_state, reward, done, prob = env.step(action)
             steps += 1
+            row, col = env.env.s // env.env.ncol, env.env.s % env.env.ncol
+            steps_data.append(
+                f'{steps}. {row},{col},{env.env.desc[row][col].decode()}, {env.env.nrow},{env.env.ncol} {ACTION_NAME_MAPPING[action]}, {reward}')
             ep_reward += reward
             curr_state = next_state
+            if render:
+                env.render()
 
             if done:
                 if verbose:
+                    format_simulation_print(ep_reward, steps, steps_data)
                     print(f'Finished episode {i} with reward {ep_reward} after {steps} steps')
 
                 total_rewards += ep_reward
@@ -144,10 +157,21 @@ def plot_policy_iteration(init_state_values):
     plt.show()
 
 
+def format_simulation_print(total_reward: float, total_steps: int, steps: List):
+    """
+    Format printing of the simulation outcome.
+    :param total_reward: Episode accumulated rewards.
+    :param total_steps: Episode total steps executed.
+    :param steps: Steps information through the episode execution.
+    """
+    print(f'total steps: {total_steps}')
+    print(f'total rewards: {total_reward}')
+    print('\n'.join(steps))
+
+
 if __name__ == '__main__':
     env = gym.make('FrozenLake8x8-v1')
     state = env.reset()
-    a = env.step(RIGHT)
 
     n_states = env.observation_space.n
     n_actions = env.action_space.n
