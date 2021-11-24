@@ -96,7 +96,7 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
         # Simulate current policy
         if total_steps > STEPS_FOR_TEST * tests_counter:
             tests_counter += 1
-            mean_reward = simulate_policy(env, Q, verbose=True, render=True)
+            mean_reward = simulate_policy(env, Q, verbose=True, render=False)
             init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
             print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon}')
 
@@ -122,18 +122,28 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
 
             action = np.argmax(Q[curr_state, :])  # greedy
 
+            # Get current env state data before performing the action
+            (row, col), tile_desc = decode_env_state(env)
+
+            # Action
             next_state, reward, done, prob = env.step(action)
             steps += 1
-            row, col = env.env.s // env.env.ncol, env.env.s % env.env.ncol
+
+            # Documenting step
             steps_data.append(
-                f'{steps}. {row},{col},{env.env.desc[row][col].decode()}, {env.env.nrow},{env.env.ncol} {ACTION_NAME_MAPPING[action]}, {reward}')
+                f'{steps}. {row},{col},{tile_desc}, {env.env.nrow - 1},{env.env.ncol - 1} {ACTION_NAME_MAPPING[action]}, {reward}')
             ep_reward += reward
+
             curr_state = next_state
             if render:
                 env.render()
 
             if done:
                 if verbose:
+                    # Documenting the final state
+                    (row, col), tile_desc = decode_env_state(env)
+                    steps_data.append(
+                        f'--> {row},{col},{tile_desc}, {env.env.nrow - 1},{env.env.ncol - 1} DONE, N/A')
                     format_simulation_print(ep_reward, steps, steps_data)
                     print(f'Finished episode {i} with reward {ep_reward} after {steps} steps')
 
@@ -142,6 +152,18 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
 
     mean_reward = total_rewards / num_trials
     return mean_reward
+
+
+def decode_env_state(env):
+    """
+    Decode current state of the Frozen Lake environment, i.e. player location in 0-based indexing and the type of tile
+    in this location
+    :param env: the Frozen Lake environment object
+    :return: (current row, current column), type of tile
+    """
+    row, col = env.env.s // env.env.ncol, env.env.s % env.env.ncol
+    tile_desc = env.env.desc[row][col].decode()
+    return (row, col), tile_desc
 
 
 def plot_policy_iteration(init_state_values):
@@ -172,14 +194,6 @@ def format_simulation_print(total_reward: float, total_steps: int, steps: List):
 if __name__ == '__main__':
     env = gym.make('FrozenLake8x8-v1')
     state = env.reset()
-
-    n_states = env.observation_space.n
-    n_actions = env.action_space.n
-
-    # print(state)
-    # print(env.action_space.n)
-    # print(a)
-    # print(env.render())
 
     init_state_vals = q_learning(env, with_eligibilty_traces=True)
 
