@@ -1,3 +1,5 @@
+import itertools
+
 import gym
 import numpy as np
 from matplotlib import pyplot as plt
@@ -40,7 +42,7 @@ ACTION_NAME_MAPPING = {
 # MIN_EPSILON = 0.05
 
 
-def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, with_eligibilty_traces=False):
+def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, with_eligibilty_traces=False, verbose=False):
     # Random init
     rng = np.random.default_rng()
 
@@ -96,7 +98,7 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
         # Simulate current policy
         if total_steps > STEPS_FOR_TEST * tests_counter:
             tests_counter += 1
-            mean_reward = simulate_policy(env, Q, verbose=True, render=False)
+            mean_reward = simulate_policy(env, Q, verbose=verbose, render=False)
             init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
             print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon}')
 
@@ -104,7 +106,6 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
         # curr_epsilon = epsilon * np.exp(-EPSILON_DECAY * num_episodes)
         curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps, MIN_EPSILON])
 
-    # print(Q)
     print(f'Total steps = {total_steps}')
 
     return np.array(init_state_values)
@@ -166,17 +167,22 @@ def decode_env_state(env):
     return (row, col), tile_desc
 
 
-def plot_policy_iteration(init_state_values):
+def plot_q_learning(init_state_values, alpha_val, lambda_val):
     """
     Plot the policy iteration convergence diagram
     :param init_state_values: A list with the mean reward of X simulations per step
     """
 
+
     plt.plot(init_state_values[:, 0], init_state_values[:, 1])
     plt.xlabel('Improvement iterations')
     plt.ylabel(f'Policy value over {NUM_SIMULATIONS} simulations')
+    plt.title(f'Q learning w/ Eligibility | alpha = {alpha_val}, lambda = {lambda_val}')
 
-    plt.show()
+    return plt
+
+
+
 
 
 def format_simulation_print(total_reward: float, total_steps: int, steps: List):
@@ -191,10 +197,34 @@ def format_simulation_print(total_reward: float, total_steps: int, steps: List):
     print('\n'.join(steps))
 
 
+def plot_q_learning_cross_validation(env, hyperparams: {'alphas': [], 'lambdas': []}):
+
+    tested_hyperparams = [hyperparams['alphas'], hyperparams['lambdas']]
+
+    num_combs = len(tested_hyperparams[0]) * len(tested_hyperparams[1])
+    f, axarr = plt.subplots(num_combs, 1, figsize=(25, 20))
+
+    # Iterate through all combinations of hyperparameters (cartesian product)
+    i = 0
+    for curr_hp_combination in itertools.product(*tested_hyperparams):
+
+        # Run Q-learning with eligibility traces
+        init_state_vals = q_learning(env, alpha=curr_hp_combination[0], lambda_value=curr_hp_combination[1],
+                                     with_eligibilty_traces=True, verbose=False)
+        axarr[i] = plot_q_learning(init_state_vals, alpha_val=curr_hp_combination[0],
+                                            lambda_val=curr_hp_combination[1])
+        i += 1
+
+    plt.show()
+
+
+
+
+
+
 if __name__ == '__main__':
     env = gym.make('FrozenLake8x8-v1')
     state = env.reset()
 
-    init_state_vals = q_learning(env, with_eligibilty_traces=True)
+    plot_q_learning_cross_validation(env, hyperparams={'alphas': [0.001, 0.01, 0.03, 0.1], 'lambdas': [0.001, 0.01, 0.1, 0.5]})
 
-    plot_policy_iteration(init_state_vals)
