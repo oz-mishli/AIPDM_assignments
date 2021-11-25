@@ -21,10 +21,10 @@ EPSILON_DECAY = 1e-6
 MIN_EPSILON = 0.05
 
 ACTION_NAME_MAPPING = {
-    0: 'move_left',
-    1: 'move_down',
-    2: 'move_right',
-    3: 'move_up'
+    0: 'left',
+    1: 'down',
+    2: 'right',
+    3: 'up'
 }
 
 
@@ -42,7 +42,20 @@ ACTION_NAME_MAPPING = {
 # MIN_EPSILON = 0.05
 
 
-def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, with_eligibilty_traces=False, verbose=False):
+def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, with_eligibilty_traces=False,
+               verbose=False, plot=False):
+    """
+    Execute the Q learning algorithm on the Frozen Lake environment
+    :param env: an object of the Frozen Lake environment
+    :param gamma: Gamma value
+    :param alpha: Alpha value
+    :param epsilon: Initial epsilon value
+    :param lambda_value: Lambda value (relevant only with eligibility traces)
+    :param with_eligibilty_traces: whether to use eligibility traces or not
+    :param verbose: verbose output during simulation runs
+    :param plot: whether to plot a chart after learning ends
+    :return: best Q(s, a) array, chart plot (None if plot=False)
+    """
     # Random init
     rng = np.random.default_rng()
 
@@ -59,6 +72,8 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
     tests_counter = 1
     curr_epsilon = epsilon
     init_state_values = []
+    max_avg_reward = 0
+    best_Q = None
 
     while total_steps < MAX_TOTAL_STEPS:
 
@@ -100,19 +115,40 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
             tests_counter += 1
             mean_reward = simulate_policy(env, Q, verbose=verbose, render=False)
             init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
+
+            # Store the policy which scored best mean reward (as the convergence process is rather noisy)
+            if mean_reward > max_avg_reward:
+                max_avg_reward = mean_reward
+                best_Q = Q
             print(f'mean reward = {mean_reward}, epsilon = {curr_epsilon}')
 
         # Update exploration with exponential decay
         # curr_epsilon = epsilon * np.exp(-EPSILON_DECAY * num_episodes)
         curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps, MIN_EPSILON])
 
-    print(f'Total steps = {total_steps}')
+    print(f'Q-learning finished, total steps = {total_steps}, mean reaward for best policy = {max_avg_reward}')
 
-    return np.array(init_state_values)
+    if plot:
+        plt = plot_q_learning(np.array(init_state_values), alpha, lambda_value, with_eligibilty_traces)
+    else:
+        plt = None
+
+    return best_Q, plt
 
 
-def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=False):
+def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=False, for_latex=False):
+    """
+    Simulate a policy on the frozen lake challenge
+    :param env: an object of the Frozen Lake environment
+    :param Q: The Q array of the policy to use
+    :param num_trials: number of simulations
+    :param verbose: verbose output
+    :param render: rendering the game step by step
+    :param for_latex: output for latex file
+    :return: mean total reward of this policy
+    """
     total_rewards = 0
+
     for i in range(num_trials):
         steps_data = list()
         ep_reward = 0
@@ -131,8 +167,12 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
             steps += 1
 
             # Documenting step
-            steps_data.append(
-                f'{steps}. {row},{col},{tile_desc}, {env.env.nrow - 1},{env.env.ncol - 1} {ACTION_NAME_MAPPING[action]}, {reward}')
+            if not for_latex:
+                steps_data.append(
+                    f'{steps}. [{row},{col}],{tile_desc}, [{env.env.nrow - 1},{env.env.ncol - 1}] {ACTION_NAME_MAPPING[action]}, {reward}')
+            else:
+                steps_data.append(
+                    f'\\item{{}} [{row},{col}],{tile_desc}, [{env.env.nrow - 1},{env.env.ncol - 1}] {ACTION_NAME_MAPPING[action]}, {reward}')
             ep_reward += reward
 
             curr_state = next_state
@@ -143,8 +183,12 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
                 if verbose:
                     # Documenting the final state
                     (row, col), tile_desc = decode_env_state(env)
-                    steps_data.append(
-                        f'--> {row},{col},{tile_desc}, {env.env.nrow - 1},{env.env.ncol - 1} DONE, N/A')
+                    if not for_latex:
+                        steps_data.append(
+                            f'--> [{row},{col}],{tile_desc}, [{env.env.nrow - 1},{env.env.ncol - 1}] DONE, N/A')
+                    else:
+                        steps_data.append(
+                            f'\\item{{}} --> [{row},{col}],{tile_desc}, [{env.env.nrow - 1},{env.env.ncol - 1}] DONE, N/A')
                     format_simulation_print(ep_reward, steps, steps_data)
                     print(f'Finished episode {i} with reward {ep_reward} after {steps} steps')
 
@@ -167,7 +211,7 @@ def decode_env_state(env):
     return (row, col), tile_desc
 
 
-def plot_q_learning(init_state_values, alpha_val, lambda_val):
+def plot_q_learning(init_state_values, alpha_val, lambda_val, with_eligibility):
     """
     Plot the policy iteration convergence diagram
     :param init_state_values: A list with the mean reward of X simulations per step
@@ -177,11 +221,12 @@ def plot_q_learning(init_state_values, alpha_val, lambda_val):
     plt.plot(init_state_values[:, 0], init_state_values[:, 1])
     plt.xlabel('Improvement iterations')
     plt.ylabel(f'Policy value over {NUM_SIMULATIONS} simulations')
-    plt.title(f'Q learning w/ Eligibility | alpha = {alpha_val}, lambda = {lambda_val}')
+    if with_eligibility:
+        plt.title(f'Q learning w/ Eligibility | alpha = {alpha_val}, lambda = {lambda_val}')
+    else:
+        plt.title(f'Q learning w/o Eligibility | alpha = {alpha_val}, lambda = {lambda_val}')
 
     return plt
-
-
 
 
 
@@ -197,34 +242,38 @@ def format_simulation_print(total_reward: float, total_steps: int, steps: List):
     print('\n'.join(steps))
 
 
-def plot_q_learning_cross_validation(env, hyperparams: {'alphas': [], 'lambdas': []}):
+def plot_q_learning_cross_validation(env, hyperparams: [{'alpha': 0, 'lambdas': 0}]):
 
-    tested_hyperparams = [hyperparams['alphas'], hyperparams['lambdas']]
+    num_combs = len(hyperparams)
+    f, axarr = plt.subplots(num_combs, 1, squeeze=False)
 
-    num_combs = len(tested_hyperparams[0]) * len(tested_hyperparams[1])
-    f, axarr = plt.subplots(num_combs, 1, figsize=(25, 20))
+    # Iterate through all hyperparameters combinations listed
+    for i in range(num_combs):
+        # Run Q-learning with eligibility traces and plot the chart
+        _, axarr[i] = q_learning(env, alpha=hyperparams[i]['alpha'], lambda_value=hyperparams[i]['lambda'],
+                                     with_eligibilty_traces=True, verbose=False, plot=True)
 
-    # Iterate through all combinations of hyperparameters (cartesian product)
-    i = 0
-    for curr_hp_combination in itertools.product(*tested_hyperparams):
-
-        # Run Q-learning with eligibility traces
-        init_state_vals = q_learning(env, alpha=curr_hp_combination[0], lambda_value=curr_hp_combination[1],
-                                     with_eligibilty_traces=True, verbose=False)
-        axarr[i] = plot_q_learning(init_state_vals, alpha_val=curr_hp_combination[0],
-                                            lambda_val=curr_hp_combination[1])
-        i += 1
 
     plt.show()
 
 
 
-
-
-
 if __name__ == '__main__':
     env = gym.make('FrozenLake8x8-v1')
-    state = env.reset()
 
-    plot_q_learning_cross_validation(env, hyperparams={'alphas': [0.001, 0.01, 0.03, 0.1], 'lambdas': [0.001, 0.01, 0.1, 0.5]})
+    # Learn with 4 parameter combinations
+    plot_q_learning_cross_validation(env, hyperparams=[{'alpha': 0.1, 'lambda': 0.15},
+                                                       {'alpha': 0.03, 'lambda': 0.08},
+                                                       {'alpha': 0.15, 'lambda': 0.5},
+                                                       {'alpha': 0.5, 'lambda': 0.15}])
+
+    chosen_alpha = 0.03
+    chosen_lambda = 0.08
+
+    # Use best combination of parameters to create the best policy
+    Q, _ = q_learning(env, alpha=chosen_alpha, lambda_value=chosen_lambda, with_eligibilty_traces=False, plot=True)
+
+    simulate_policy(env, Q, num_trials=3, verbose=True, for_latex=True)
+
+
 
