@@ -136,12 +136,13 @@ def q_learning(env, gamma=0.95, alpha=0.03, epsilon=0.995, lambda_value=0.1, wit
     return best_Q, plt
 
 
-def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=False, for_latex=False):
+def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, gamma=0.95, verbose=False, render=False, for_latex=False):
     """
     Simulate a policy on the frozen lake challenge
     :param env: an object of the Frozen Lake environment
     :param Q: The Q array of the policy to use
     :param num_trials: number of simulations
+    :param gamma: Discount factor parameter.
     :param verbose: verbose output
     :param render: rendering the game step by step
     :param for_latex: output for latex file
@@ -173,7 +174,7 @@ def simulate_policy(env, Q, num_trials=NUM_SIMULATIONS, verbose=False, render=Fa
             else:
                 steps_data.append(
                     f'\\item{{}} [{row},{col}],{tile_desc}, [{env.env.nrow - 1},{env.env.ncol - 1}] {ACTION_NAME_MAPPING[action]}, {reward}')
-            ep_reward += reward
+            ep_reward += reward * (gamma ** steps)
 
             curr_state = next_state
             if render:
@@ -217,7 +218,6 @@ def plot_q_learning(init_state_values, alpha_val, lambda_val, with_eligibility):
     :param init_state_values: A list with the mean reward of X simulations per step
     """
 
-
     plt.plot(init_state_values[:, 0], init_state_values[:, 1])
     plt.xlabel('Improvement iterations')
     plt.ylabel(f'Policy value over {NUM_SIMULATIONS} simulations')
@@ -227,7 +227,6 @@ def plot_q_learning(init_state_values, alpha_val, lambda_val, with_eligibility):
         plt.title(f'Q learning w/o Eligibility | alpha = {alpha_val}, lambda = {lambda_val}')
 
     return plt
-
 
 
 def format_simulation_print(total_reward: float, total_steps: int, steps: List):
@@ -243,7 +242,6 @@ def format_simulation_print(total_reward: float, total_steps: int, steps: List):
 
 
 def plot_q_learning_cross_validation(env, hyperparams: [{'alpha': 0, 'lambdas': 0}]):
-
     num_combs = len(hyperparams)
     f, axarr = plt.subplots(num_combs, 1, squeeze=False)
 
@@ -251,11 +249,9 @@ def plot_q_learning_cross_validation(env, hyperparams: [{'alpha': 0, 'lambdas': 
     for i in range(num_combs):
         # Run Q-learning with eligibility traces and plot the chart
         _, axarr[i] = q_learning(env, alpha=hyperparams[i]['alpha'], lambda_value=hyperparams[i]['lambda'],
-                                     with_eligibilty_traces=True, verbose=False, plot=True)
-
+                                 with_eligibilty_traces=True, verbose=False, plot=True)
 
     plt.show()
-
 
 
 if __name__ == '__main__':
@@ -274,6 +270,3 @@ if __name__ == '__main__':
     Q, _ = q_learning(env, alpha=chosen_alpha, lambda_value=chosen_lambda, with_eligibilty_traces=False, plot=True)
 
     simulate_policy(env, Q, num_trials=3, verbose=True, for_latex=True)
-
-
-
