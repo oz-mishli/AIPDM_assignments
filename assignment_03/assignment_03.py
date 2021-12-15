@@ -32,6 +32,16 @@ def generate_centers(p_range, v_range):
     return np.transpose(np.array(list(product(c_p, c_v))))
 
 
+def generate_uniform_centers(p_range, v_range):
+    p_step = (p_range[1] - p_range[0]) / POSITION_GAUSS_CENTERS
+    v_step = (v_range[1] - v_range[0]) / VELOCITY_GAUSS_CENTERS
+    c_p = np.arange(p_range[0], p_range[1], p_step)
+    c_v = np.arange(v_range[0], v_range[1], v_step)
+
+    print(f'Position centers: {c_p}\nVelocity centers: {c_v}')
+    return np.transpose(np.array(list(product(c_p, c_v))))
+
+
 def state_to_feature_vector(s):
     x = s[..., np.newaxis] - CENTERS
     return np.diag(np.exp(-0.5 * (np.transpose(x) @ COV_MATRIX_T @ x)))
@@ -150,6 +160,6 @@ def simulate_policy(env, w, num_trials=NUM_SIMULATIONS, gamma=0.95, verbose=Fals
 if __name__ == '__main__':
     env = gym.make('MountainCar-v0')
 
-    CENTERS = generate_centers((env.env.min_position, env.env.max_position), (0, env.env.max_speed))
+    CENTERS = generate_uniform_centers((env.env.min_position, env.env.max_position), (0, env.env.max_speed))
 
     control_algorithm(env)
