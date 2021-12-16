@@ -258,10 +258,10 @@ if __name__ == '__main__':
     env = gym.make('FrozenLake8x8-v1')
 
     # Learn with 4 parameter combinations
-    plot_q_learning_cross_validation(env, hyperparams=[{'alpha': 0.1, 'lambda': 0.15},
-                                                       {'alpha': 0.03, 'lambda': 0.08},
-                                                       {'alpha': 0.15, 'lambda': 0.5},
-                                                       {'alpha': 0.5, 'lambda': 0.15}])
+    #plot_q_learning_cross_validation(env, hyperparams=[{'alpha': 0.1, 'lambda': 0.15},
+    #                                                   {'alpha': 0.03, 'lambda': 0.08},
+    #                                                   {'alpha': 0.15, 'lambda': 0.5},
+    #                                                   {'alpha': 0.5, 'lambda': 0.15}])
 
     chosen_alpha = 0.03
     chosen_lambda = 0.08
