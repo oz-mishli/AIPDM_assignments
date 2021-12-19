@@ -1,6 +1,8 @@
 import gym
 import numpy as np
 from itertools import product
+import matplotlib.pyplot as plt
+import pickle
 
 POSITION_GAUSS_CENTERS = 4
 VELOCITY_GAUSS_CENTERS = 8
@@ -9,7 +11,7 @@ COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004]))
 CENTERS = np.zeros((2, POSITION_GAUSS_CENTERS * VELOCITY_GAUSS_CENTERS))
 
 MAX_STEPS_PER_EPISODE = 200
-MAX_TOTAL_STEPS = 1e6
+MAX_TOTAL_STEPS = 6e5
 NUM_SIMULATIONS = 100
 STEPS_FOR_TEST = 10000
 EPSILON_DECAY = 1e-6
@@ -54,6 +56,7 @@ def Q(s, a, w):
     # Multiply by the relevant action weights
     return np.dot(theta, w[a])
 
+
 def choose_best_action(s, w):
     """
     Efficient function to calculate greedy action
@@ -69,14 +72,14 @@ def choose_best_action(s, w):
                       np.dot(theta, w[2])])
 
 
-
 def epsilon_greedy_next_action(env, rng: np.random.Generator, epsilon, Q, current_state, w):
     if rng.uniform(0, 1) < epsilon:
-        return env.action_space.sample() # exploration
+        return env.action_space.sample()  # exploration
     else:
         return choose_best_action(current_state, w)
 
-def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=0.995, lambda_value=0,
+
+def control_algorithm(environment, gamma=1, alpha=0.0005, lambda_val=0.5, epsilon=0.995, lambda_value=0,
                       verbose=False, plot=False):
     # Random init
     rng = np.random.default_rng()
@@ -89,7 +92,9 @@ def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=
     num_episodes = 0
     tests_counter = 1
     curr_epsilon = epsilon
-    init_state_values = []
+    simulations_steps = list()
+    simulations_mean_reward = list()
+
     max_avg_reward = 0
     best_w = None
     last_E = 0
@@ -109,7 +114,7 @@ def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=
             # Calculate delta
             old_q_val = Q(curr_state, action, w)
             # Q learning
-            #delta = (reward + gamma * np.max(
+            # delta = (reward + gamma * np.max(
             #    [Q(next_state, 0, w), Q(next_state, 1, w), Q(next_state, 2, w)])) - old_q_val
 
             # Backward-view TD lambda
@@ -118,8 +123,8 @@ def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=
             curr_E = gamma * lambda_val * last_E + state_to_feature_vector(curr_state)
 
             # SGD step
-            #w[action] += alpha * delta * state_to_feature_vector(curr_state) # Q-learning
-            w[action] += alpha * delta * curr_E # Backward-view TD lambda
+            # w[action] += alpha * delta * state_to_feature_vector(curr_state) # Q-learning
+            w[action] += alpha * delta * curr_E  # Backward-view TD lambda
 
             # Eligibility traces update
             last_E = curr_E
@@ -138,7 +143,8 @@ def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=
         if total_steps > STEPS_FOR_TEST * tests_counter:
             tests_counter += 1
             mean_reward = simulate_policy(environment, w, verbose=verbose, render=False)
-            init_state_values.append([STEPS_FOR_TEST * tests_counter, mean_reward])
+            simulations_steps.append(STEPS_FOR_TEST * tests_counter)
+            simulations_mean_reward.append(mean_reward)
 
             # Store the policy which scored best mean reward (as the convergence process is rather noisy)
             if mean_reward > max_avg_reward:
@@ -150,8 +156,14 @@ def control_algorithm(environment, gamma=1, alpha=0.02, lambda_val=0.5, epsilon=
         # curr_epsilon = epsilon * np.exp(-EPSILON_DECAY * num_episodes)
         curr_epsilon = np.max([epsilon - EPSILON_DECAY * total_steps, MIN_EPSILON])
 
-    print(f'Sarsa Lambda finished, total steps = {total_steps}, mean reaward for best policy = {max_avg_reward}')
+    if plot:
+        plt.plot(simulations_steps, simulations_mean_reward)
+        plt.xlabel('Control Steps')
+        plt.ylabel('Average Mean Reward')
+        plt.show()
 
+    print(f'Sarsa Lambda finished, total steps = {total_steps}, mean reward for best policy = {max_avg_reward}')
+    save_w(best_w, 'best_w.pkl')
     return best_w
 
 
@@ -164,27 +176,41 @@ def simulate_policy(env, w, num_trials=NUM_SIMULATIONS, gamma=0.95, verbose=Fals
         curr_state = env.reset()
 
         while True:
+            if render:
+                env.render()
             action = choose_best_action(curr_state, w)
 
             # Action
             next_state, reward, done, prob = env.step(action)
             steps += 1
-            ep_reward += reward # * (gamma ** steps)  
+            ep_reward += reward  # * (gamma ** steps)
 
             curr_state = next_state
 
             if done:
                 total_rewards += ep_reward
-                #print(f'Episode finished with reward={reward} at the last {steps} step, agent pos = {next_state}')
+                # print(f'Episode finished with reward={reward} at the last {steps} step, agent pos = {next_state}')
                 break
 
     mean_reward = total_rewards / num_trials
     return mean_reward
 
 
+def save_w(w, path_to_save):
+    with open(path_to_save, 'wb') as to_save_file:
+        pickle.dump(w, to_save_file)
+
+
+def load_w(path_to_load):
+    with open(path_to_load, 'rb') as w_file:
+        return pickle.load(w_file,encoding='bytes')
+
+
 if __name__ == '__main__':
     env = gym.make('MountainCar-v0')
-
-    CENTERS = generate_uniform_centers((env.env.min_position, env.env.max_position), (-env.env.max_speed, env.env.max_speed))
-
-    control_algorithm(env)
+    best_w = load_w('best_w.pkl')
+    simulate_policy(env, best_w, num_trials=1, render=True)
+    # CENTERS = generate_uniform_centers((env.env.min_position, env.env.max_position),
+    #                                    (-env.env.max_speed, env.env.max_speed))
+    #
+    # control_algorithm(env, plot=True)
