@@ -19,15 +19,14 @@ ACTOR_CENTERS = np.zeros((2, ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NU
 CRITIC_CENTERS = np.zeros((3, ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM * ACTION_GAUSS_CENTERS_NUM))
 
 ACTOR_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004]))
-CRITIC_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004, 0.0001])) # TODO have no idea which values to put here...
-VARIANCE = 0.5 # TODO find good value for variance hyper-parameter
+CRITIC_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004, 0.0001]))  # TODO have no idea which values to put here...
+VARIANCE = 0.5  # TODO find good value for variance hyper-parameter
 ALPHA = 0.001
 BETA = 0.01
 GAMMA = 1
 
 
 def discretize_action_space(env):
-
     min = env.action_space.low
     max = env.action_space.high
 
@@ -46,10 +45,9 @@ def discretize_action_space(env):
 
 
 def actor_critic(env, alpha=ALPHA, beta=BETA, gamma=GAMMA):
-
     theta = np.zeros(ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM)
     w = np.zeros(ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM * ACTION_GAUSS_CENTERS_NUM)
-    s = env.reset()
+    env.reset()
     s = env.state
     total_steps = 0
     tests_counter = 1
@@ -57,7 +55,7 @@ def actor_critic(env, alpha=ALPHA, beta=BETA, gamma=GAMMA):
 
     a = sample_from_gaussian_policy(s, theta)
 
-    while (total_steps < MAX_STEPS):
+    while total_steps < MAX_STEPS:
         next_state, reward, done, prob = env.step([a])
         next_state = env.state
         next_action = sample_from_gaussian_policy(next_state, theta)
@@ -80,20 +78,19 @@ def actor_critic(env, alpha=ALPHA, beta=BETA, gamma=GAMMA):
             print(f'mean reward = {mean_reward}')
 
 
-
 def simulate_policy(env, theta, num_trials=NUM_SIMULATIONS, verbose=False, render=False, for_latex=False):
     total_rewards = 0
 
     for i in range(num_trials):
         ep_reward = 0
         steps = 0
-        curr_state = env.reset()
+        env.reset()
         curr_state = env.state
 
         while True:
             if render:
                 env.render()
-                time.sleep(0.025) # Add delay so we can meaningfully watch the episode
+                time.sleep(0.025)  # Add delay so we can meaningfully watch the episode
             action = sample_from_gaussian_policy(curr_state, theta)
 
             # Action
@@ -120,7 +117,6 @@ def simulate_policy(env, theta, num_trials=NUM_SIMULATIONS, verbose=False, rende
     return mean_reward
 
 
-
 def generate_actor_centers(a_range, v_range):
     """
     Generate fixed centers for the RBF features, evenly distributed within the respective ranges for position and
@@ -139,8 +135,8 @@ def generate_actor_centers(a_range, v_range):
     print(f'Angle centers: {c_p}\nVelocity centers: {c_v}')
     return np.transpose(np.array(list(product(c_p, c_v))))
 
-def generate_critic_centers(a_range, v_range, act_range):
 
+def generate_critic_centers(a_range, v_range, act_range):
     p_step = (a_range[1] - a_range[0]) / ANGLE_GAUSS_CENTERS_NUM
     v_step = (v_range[1] - v_range[0]) / VELOCITY_GAUSS_CENTERS_NUM
     act_step = (act_range[1] - act_range[0]) / ACTION_GAUSS_CENTERS_NUM
@@ -150,8 +146,6 @@ def generate_critic_centers(a_range, v_range, act_range):
 
     print(f'Angle centers: {c_p}\nVelocity centers: {c_v}\nAction centers: {c_act}')
     return np.transpose(np.array(list(product(c_p, c_v, c_act))))
-
-
 
 
 def state_to_feature_vector(s):
@@ -178,13 +172,11 @@ def state_action_to_feature_vector(s, a):
 
 
 def sample_from_gaussian_policy(s, theta):
-
     mean = np.dot(state_to_feature_vector(s), theta)
     return np.random.normal(loc=mean, scale=VARIANCE)
 
 
 def gaussian_score_function(s, a, theta):
-
     mean = np.dot(state_to_feature_vector(s), theta)
     factor = (a - mean) / VARIANCE ** 2
 
@@ -192,27 +184,20 @@ def gaussian_score_function(s, a, theta):
 
 
 def Q_critic(s, a, w):
-
     theta = state_action_to_feature_vector(s, a)
     return np.dot(theta, w)
 
 
-
-
-
-
 if __name__ == '__main__':
-
     env = gym.make('Pendulum-v1')
 
     ACTOR_CENTERS = generate_actor_centers((-np.pi, np.pi),
-                                             (-env.env.max_speed, env.env.max_speed))
+                                           (-env.env.max_speed, env.env.max_speed))
     CRITIC_CENTERS = generate_critic_centers((-np.pi, np.pi),
-                                            (-env.env.max_speed, env.env.max_speed),
-                                            (env.action_space.low, env.action_space.high))
+                                             (-env.env.max_speed, env.env.max_speed),
+                                             (env.action_space.low, env.action_space.high))
 
     actor_critic(env)
-
 
     # Draft code for analyzing the env
     # sp = env.observation_space
@@ -234,6 +219,3 @@ if __name__ == '__main__':
     #
     #
     # x = env.step(3)
-
-
-
