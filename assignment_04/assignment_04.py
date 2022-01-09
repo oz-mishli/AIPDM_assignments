@@ -1,7 +1,12 @@
+#import keyboard For env simulation, not used
 from itertools import product
+import matplotlib.pyplot as plt
 import numpy as np
 import gym
 import time
+
+import pynput.keyboard
+from pynput.keyboard import Key, Listener
 
 NUM_DISCRETE_ACTIONS_PER_RANGE = 3
 ACTIONS_MAPPING = dict()
@@ -9,8 +14,10 @@ ANGLE_GAUSS_CENTERS_NUM = 4
 VELOCITY_GAUSS_CENTERS_NUM = 8
 ACTION_GAUSS_CENTERS_NUM = 3
 MAX_STEPS = 1e6
+MAX_EPISODE_STEPS = 200
 NUM_SIMULATIONS = 100
-STEPS_FOR_TEST = 1000
+STEPS_FOR_TEST = 10000
+REWARD_NORM_CONSTANT = 15
 
 # Actor centers are only for state
 ACTOR_CENTERS = np.zeros((2, ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM))
@@ -19,63 +26,82 @@ ACTOR_CENTERS = np.zeros((2, ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NU
 CRITIC_CENTERS = np.zeros((3, ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM * ACTION_GAUSS_CENTERS_NUM))
 
 ACTOR_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004]))
-CRITIC_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004, 0.0001]))  # TODO have no idea which values to put here...
-VARIANCE = 0.5  # TODO find good value for variance hyper-parameter
+CRITIC_COV_MATRIX_INV = np.linalg.inv(np.diag([0.04, 0.0004, 0.0001]))
+VARIANCE = 10
 ALPHA = 0.001
 BETA = 0.01
 GAMMA = 1
 
 
-def discretize_action_space(env):
-    min = env.action_space.low
-    max = env.action_space.high
+def actor_critic(env, alpha=ALPHA, beta=BETA, gamma=GAMMA, plot=False):
 
-    actions = np.arange(min, 0, (max - min) / (NUM_DISCRETE_ACTIONS_PER_RANGE * 2), dtype=float)
+    rng = np.random.default_rng()
 
-    actions_mapping = {
-        0: (actions[0], 'la-3'),
-        1: (actions[1], 'la-2'),
-        2: (actions[2], 'la-1'),
-        3: (0.0, 'na'),
-        4: (-actions[2], 'ra-1'),
-        5: (-actions[1], 'ra-2'),
-        6: (-actions[0], 'ra-3')
-    }
-    return actions_mapping
-
-
-def actor_critic(env, alpha=ALPHA, beta=BETA, gamma=GAMMA):
-    theta = np.zeros(ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM)
+    theta = np.random.random((ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM))
     w = np.zeros(ANGLE_GAUSS_CENTERS_NUM * VELOCITY_GAUSS_CENTERS_NUM * ACTION_GAUSS_CENTERS_NUM)
     env.reset()
     s = env.state
     total_steps = 0
     tests_counter = 1
     simulation_series = list()
+    simulation_vals = list()
+    done = False
+    ep_reward = 0
+    best_theta = 0
+    best_mean_reward = 0
 
-    a = sample_from_gaussian_policy(s, theta)
+    a, un_normalized_a = sample_from_gaussian_policy(s, theta)
 
     while total_steps < MAX_STEPS:
-        next_state, reward, done, prob = env.step([a])
-        next_state = env.state
-        next_action = sample_from_gaussian_policy(next_state, theta)
 
-        old_Q = Q_critic(s, a, w)
-        delta = reward + gamma * Q_critic(next_state, next_action, w) - old_Q
-        theta += alpha * gaussian_score_function(s, a, theta) * old_Q
-        w += beta * delta * state_action_to_feature_vector(s, a)
+        while not done:
+            next_state, reward, done, prob = env.step([a])
+            ep_reward += reward
+            if done:
+                env.reset()
+                s = env.state
+                ep_reward = 0
+                ep_steps = 0
+                done = False
+                break
 
-        a = next_action
-        s = next_state
-        total_steps += 1
+            reward += REWARD_NORM_CONSTANT
+            next_state = env.state
+            next_action, next_action_un_normalized = sample_from_gaussian_policy(next_state, theta)
+
+            old_Q = Q_critic(s, a, w)
+            delta = reward + gamma * Q_critic(next_state, next_action, w) - old_Q
+
+            # Actor update
+            theta += alpha * gaussian_score_function(s, a, theta) * old_Q
+
+            # Critic update
+            w += beta * delta * state_action_to_feature_vector(s, a)
+
+            a = next_action
+            s = next_state
+            total_steps += 1
 
         # Simulate current policy
         if total_steps > STEPS_FOR_TEST * tests_counter:
             tests_counter += 1
             mean_reward = simulate_policy(env, theta)
-            simulation_series.append((STEPS_FOR_TEST * tests_counter, mean_reward))
+            if mean_reward > best_mean_reward:
+                best_theta = theta
+                best_mean_reward = mean_reward
+            simulation_series.append(STEPS_FOR_TEST * tests_counter)
+            simulation_vals.append(mean_reward)
+
 
             print(f'mean reward = {mean_reward}')
+
+    if plot:
+        plt.plot(simulation_series, simulation_vals)
+        plt.xlabel('Control Steps')
+        plt.ylabel('Average Mean Reward')
+        plt.show()
+
+    return best_theta
 
 
 def simulate_policy(env, theta, num_trials=NUM_SIMULATIONS, verbose=False, render=False, for_latex=False):
@@ -91,23 +117,25 @@ def simulate_policy(env, theta, num_trials=NUM_SIMULATIONS, verbose=False, rende
             if render:
                 env.render()
                 time.sleep(0.025)  # Add delay so we can meaningfully watch the episode
-            action = sample_from_gaussian_policy(curr_state, theta)
+            action, un_norm_action = sample_from_gaussian_policy(curr_state, theta)
 
             # Action
             next_state, reward, done, prob = env.step([action])
+            reward += REWARD_NORM_CONSTANT
+
             next_state = env.state
             steps += 1
             ep_reward += reward
 
-            # if verbose:
-            #     if for_latex:
-            #         print(f'\\item{{}} {next_state[0]}, {next_state[1]}, 0.5, 0, {ACTION_NAME_MAPPING[action]}, {reward}')
-            #     else:
-            #         print(f'{steps}. {next_state[0]}, {next_state[1]}, 0.5, 0, {ACTION_NAME_MAPPING[action]}, {reward}')
+            if verbose:
+                if for_latex:
+                    print(f'\\item{{}} theta: {next_state[0]}, theta dot: {next_state[1]}, action: {action}, reward:{reward}')
+                else:
+                     print(f'{steps}. theta: {next_state[0]}, theta dot: {next_state[1]}, action: {action}, reward:{reward}')
 
             curr_state = next_state
 
-            if done:
+            if (done) or (steps > MAX_EPISODE_STEPS):
                 total_rewards += ep_reward
                 if verbose:
                     print(f'Trial episode {i} finished with reward {ep_reward}')
@@ -119,12 +147,12 @@ def simulate_policy(env, theta, num_trials=NUM_SIMULATIONS, verbose=False, rende
 
 def generate_actor_centers(a_range, v_range):
     """
-    Generate fixed centers for the RBF features, evenly distributed within the respective ranges for position and
+    Generate fixed centers for the actor RBF features, evenly distributed within the respective ranges for position and
     velocity
-    :param p_range: tuple of (a, b) representing the range of positions available
-    :param v_range: tuple if (a, b) representing the range of speed values
+    :param a_range: tuple of (a, b) representing the range of angles available
+    :param v_range: tuple of (a, b) representing the range of velocity values
     :return: Numpy array with all the circle centers of shape (2, POSITION_GAUSS_CENTERS * VELOCITY_GAUSS_CENTERS) This
-    array contains all possible combinations of position circles and velocity circles (i.e. cartersian product)
+    array contains all possible combinations of position circles and velocity circles (i.e. cartesian product)
     """
 
     p_step = (a_range[1] - a_range[0]) / ANGLE_GAUSS_CENTERS_NUM
@@ -137,6 +165,14 @@ def generate_actor_centers(a_range, v_range):
 
 
 def generate_critic_centers(a_range, v_range, act_range):
+    """
+    Generate fixed centers for the critic RBF features, evenly distributed within the respective ranges for position,
+    velocity and action
+    :param a_range: tuple of (a, b) representing the range of angles available
+    :param v_range: tuple of (a, b) representing the range of velocity values
+    :param act_range: tuple of (a, b) representing the range of action values
+    :return:
+    """
     p_step = (a_range[1] - a_range[0]) / ANGLE_GAUSS_CENTERS_NUM
     v_step = (v_range[1] - v_range[0]) / VELOCITY_GAUSS_CENTERS_NUM
     act_step = (act_range[1] - act_range[0]) / ACTION_GAUSS_CENTERS_NUM
@@ -154,16 +190,17 @@ def state_to_feature_vector(s):
     :param s: Input state
     :return: The feature vector representing the input state
     """
+
     x = s[..., np.newaxis] - ACTOR_CENTERS
     return np.diag(np.exp(-0.5 * (np.transpose(x) @ ACTOR_COV_MATRIX_INV @ x)))
 
 
 def state_action_to_feature_vector(s, a):
     """
-
-    :param s:
-    :param a:
-    :return:
+    Translate from a given state and action to a feature vector representing that state and action
+    :param s: Input state
+    :param a: Input action
+    :return: The feature vector representing the input state and input action
     """
 
     x = np.append(s, a)  # add the action as the third dimension
@@ -172,11 +209,29 @@ def state_action_to_feature_vector(s, a):
 
 
 def sample_from_gaussian_policy(s, theta):
+    """
+    Sample an action from the Gaussian policy
+    :param s: the current state
+    :param theta: the parameters of the policy
+    :return:
+    """
     mean = np.dot(state_to_feature_vector(s), theta)
-    return np.random.normal(loc=mean, scale=VARIANCE)
+    orig_val = np.random.normal(loc=mean, scale=VARIANCE)
+    normalized_val = np.tanh(orig_val) * 2
+
+    # Return the normalized value of the policy, as well as the original value (Implemented according to section 2 of
+    # Ronen's note)
+    return normalized_val, orig_val
 
 
 def gaussian_score_function(s, a, theta):
+    """
+    Calculate the Gaussian score function
+    :param s: input state
+    :param a: input action
+    :param theta: current set of parameters for the policy evaluation
+    :return: the score of (s, a)
+    """
     mean = np.dot(state_to_feature_vector(s), theta)
     factor = (a - mean) / VARIANCE ** 2
 
@@ -188,8 +243,35 @@ def Q_critic(s, a, w):
     return np.dot(theta, w)
 
 
+
+#############
+# This code is not in use, was used for figuring out the environment manually so we can come up with a hand-crafted
+# policy to start with
+# env = gym.make('Pendulum-v1')
+# def show(key):
+#
+#     #print('\nYou Entered {0}'.format(key))
+#     if key.char == "a":
+#         print("a")
+#         print(env.step([1]))
+#         #env.render()
+#     if key.char == "d":
+#         print("d")
+#         print(env.step([-1]))
+#         #env.render()
+#
+#     #return False
+#
+#  if key == Key.delete:
+#     # Stop listener
+#     return False
+############
+
+
 if __name__ == '__main__':
+
     env = gym.make('Pendulum-v1')
+
 
     ACTOR_CENTERS = generate_actor_centers((-np.pi, np.pi),
                                            (-env.env.max_speed, env.env.max_speed))
@@ -197,25 +279,49 @@ if __name__ == '__main__':
                                              (-env.env.max_speed, env.env.max_speed),
                                              (env.action_space.low, env.action_space.high))
 
-    actor_critic(env)
+    best_theta = actor_critic(env, plot=True)
 
-    # Draft code for analyzing the env
+    print(best_theta)
+
+    simulate_policy(env, best_theta, 1, verbose=True, for_latex=True)
+
+    #############
+    # This code is not in use, was used for figuring out the environment manually so we can come up with a hand-crafted
+    # policy to start with
+    ### Env debugging
+    # start = env.reset()
+    # env.render()
+    # #Draft code for analyzing the env
     # sp = env.observation_space
     #
     # start = env.reset()
     # print(start)
     #
+    # # # Collect all event until released
+    # # with Listener(on_press=show) as listener:
+    # #     listener.start()
+    #
     # env.render()
     # steps = 0
-    # while(steps < 100):
-    #     step = env.step([2])
-    #     print(step)
-    #     print(env.state)
-    #     env.render()
-    #     time.sleep(1)
+    #
+    # with pynput.keyboard.Events() as events:
     #
     #
+    #     while(steps < 1000):
+    #         #step = env.step([2])
+    #         #print(step)
+    #         #print(env.state)
     #
-    #
-    #
-    # x = env.step(3)
+    #         event = events.get(0.2)
+    #         if event is None:
+    #             next_state, reward, done, prob = env.step([0])
+    #         elif event.key == Key.left:
+    #             next_state, reward, done, prob = env.step([-0.5])
+    #             print("left")
+    #         elif event.key == Key.right:
+    #             next_state, reward, done, prob = env.step([0.5])
+    #             print("right")
+    #         env.render()
+    #     #time.sleep(0.1)
+    #############
+
