@@ -1,12 +1,14 @@
 #import keyboard For env simulation, not used
+#import pynput.keyboard  For env simulation, not used
+#from pynput.keyboard import Key, Listener  For env simulation, not used
+
 from itertools import product
 import matplotlib.pyplot as plt
 import numpy as np
 import gym
 import time
 
-import pynput.keyboard
-from pynput.keyboard import Key, Listener
+
 
 NUM_DISCRETE_ACTIONS_PER_RANGE = 3
 ACTIONS_MAPPING = dict()
