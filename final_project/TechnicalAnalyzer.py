@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import StockDataFetcher
+from ta import momentum
 
 
 class TechnicalAnalyzer:
@@ -51,6 +51,14 @@ class TechnicalAnalyzer:
              for index in range(intervals - q_variance_span, intervals)])
         q_t_variance = q_t.var()
         return q_t[len(q_t) - 1] / q_t_variance
+
+    @staticmethod
+    def get_rsi(stock_data: pd.DataFrame, current_index: int, window: int) -> float:
+        """
+        Calculate RSI feature value for current index.
+        """
+        rsi = momentum.rsi(stock_data['Close'][:current_index], window, fillna=True)
+        return rsi[len(rsi) - 1]
 
     @staticmethod
     def _get_q_t(stock_data: pd.DataFrame, current_index: int, price_variance_span: int,
