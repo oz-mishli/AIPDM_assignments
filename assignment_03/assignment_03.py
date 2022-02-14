@@ -286,7 +286,7 @@ if __name__ == '__main__':
         best_weights = control_algorithm(env, plot=True)
         save_w(best_weights, BEST_W_FILE)
 
-    simulate_policy(env, best_weights, num_trials=10, render=True, verbose=True, for_latex=True)
+    simulate_policy(env, best_weights, num_trials=10, render=True, verbose=True, for_latex=False)
 
 
 
