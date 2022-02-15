@@ -1,6 +1,8 @@
 
 
 class Simulator:
+    # TBD fill in functions
+    # TBD define when an episode is done (at 0 account value or another low minimum amount
 
     def __init__(self):
         return 0
