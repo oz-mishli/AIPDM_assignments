@@ -12,8 +12,7 @@ class LSTMAutoEncoder(nn.Module):
         return 0
 
 
-
-def train(model: LSTMAutoEncoder, device, train_loader, num_epochs, learning_rate):
+def train(model: LSTMAutoEncoder, device, transitions, targets, learning_rate):
 
     model = model.to(device)
     model.train()
