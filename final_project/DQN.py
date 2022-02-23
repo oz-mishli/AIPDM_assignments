@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 INPUT_SIZE = 7
 HIDDEN_SIZE = 64
+NUM_ACTIONS = 3
 CONVERGENCE_DELTA = 1e5
 MEM_SIZE = 5000
 BATCH_SIZE = 64
@@ -21,17 +22,18 @@ EPSILON_DECAY_RATE = 0.0001
 
 class DQN:
 
-    def __init__(self, env: Simulator.Simulator, epsilon, gamma=GAMMA):
+    def __init__(self, env: Simulator.Simulator, epsilon, gamma=GAMMA, duelling_network=True):
 
         self.epsilon = epsilon
         self.gamma = gamma
         self.rng = np.random.default_rng()
         self.env = env.reset()
         self.replay_buffer = ReplayMemory(MEM_SIZE)
+        self.duelling_network = duelling_network
 
         # Initializing both online and target NNs with random weights
-        self.online_network = LSTM.LSTMAutoEncoder(INPUT_SIZE, HIDDEN_SIZE)
-        self.target_network = LSTM.LSTMAutoEncoder(INPUT_SIZE, HIDDEN_SIZE)
+        self.online_network = LSTM.LSTMNetwork(INPUT_SIZE, HIDDEN_SIZE, NUM_ACTIONS, self.duelling_network)
+        self.target_network = LSTM.LSTMNetwork(INPUT_SIZE, HIDDEN_SIZE, NUM_ACTIONS, self.duelling_network)
 
 
     def choose_act_eps_greedy(self, curr_state):
@@ -79,7 +81,7 @@ class DQN:
                         transition[5] = label
 
                     loss = LSTM.train(self.online_network, torch.device, batch, ALPHA)
-                    loss_list.append([steps, episodes, next_loss])
+                    loss_list.append([steps, episodes, loss])
 
                     # Copy weights from online network to target network every tau steps
                     if steps % TAU == 0:
