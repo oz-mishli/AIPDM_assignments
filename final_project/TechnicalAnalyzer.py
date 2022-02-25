@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 from ta import momentum
@@ -10,7 +12,33 @@ class TechnicalAnalyzer:
         Add technical features to the stock data Dataframe.
         :param stock_data: Stock data we get from StockDataFetcher module.
         """
-        pass
+        normalized_price = TechnicalAnalyzer.get_normalized_price(stock_data)
+        return_indicator_1_month = []
+        return_indicator_2_month = []
+        return_indicator_3_month = []
+        return_indicator_1_year = []
+        macd = []
+        rsi = []
+        for i in range(stock_data.shape[0]):
+            return_indicator_1_month.append(TechnicalAnalyzer.get_return(stock_data, i, i - 21, 60, 0.94))
+            return_indicator_2_month.append(TechnicalAnalyzer.get_return(stock_data, i, i - 42, 60, 0.94))
+            return_indicator_3_month.append(TechnicalAnalyzer.get_return(stock_data, i, i - 63, 60, 0.94))
+            return_indicator_1_year.append(TechnicalAnalyzer.get_return(stock_data, i, i - 252, 60, 0.94))
+            macd.append(TechnicalAnalyzer.get_macd(stock_data, i, 252, 63, 0.94, 10, 20))
+            rsi.append(TechnicalAnalyzer.get_rsi(stock_data, i, 30))
+
+        features = np.concatenate((
+            np.array([normalized_price]),
+            np.array([return_indicator_1_month]),
+            np.array([return_indicator_1_month]),
+            np.array([return_indicator_2_month]),
+            np.array([return_indicator_3_month]),
+            np.array([return_indicator_1_year]),
+            np.array([macd]),
+            np.array([rsi])),
+            axis=0)
+
+        return pd.DataFrame(features).transpose()
 
     @staticmethod
     def get_normalized_price(stock_data: pd.DataFrame) -> pd.Series:
@@ -29,14 +57,17 @@ class TechnicalAnalyzer:
         Calculate return relevant to past price.
         """
         if current_index < past_index:
-            raise ValueError('Past index should be larger than current_index.')
+            raise ValueError('current_index should be larger than Past index.')
+
+        if past_index < 0 or current_index < variance_span + 1:
+            return None
 
         close_data = stock_data['Close']
         r_t = close_data[current_index] - close_data[past_index]
         daily_r_t = pd.Series(np.array(close_data[current_index - variance_span:current_index]) -
                               np.array(close_data[current_index - variance_span - 1:current_index - 1]))
         sigma_t = (TechnicalAnalyzer._get_exponential_moving_average(daily_r_t, exp_weight)).var()
-        return r_t / (sigma_t * np.sqrt(current_index - past_index))
+        return r_t / max((sigma_t * np.sqrt(current_index - past_index)), 0.01)
 
     @staticmethod
     def get_macd(stock_data: pd.DataFrame, current_index: int, price_variance_span: int,
@@ -50,13 +81,19 @@ class TechnicalAnalyzer:
             [TechnicalAnalyzer._get_q_t(stock_data, index, price_variance_span, exp_weight, short_range, long_range)
              for index in range(intervals - q_variance_span, intervals)])
         q_t_variance = q_t.var()
-        return q_t[len(q_t) - 1] / q_t_variance
+        result = q_t[len(q_t) - 1] / max(q_t_variance, 0.01)
+        if math.isnan(result):
+            return None
+        return result
 
     @staticmethod
     def get_rsi(stock_data: pd.DataFrame, current_index: int, window: int) -> float:
         """
         Calculate RSI feature value for current index.
         """
+        if current_index < window:
+            return None
+
         rsi = momentum.rsi(stock_data['Close'][:current_index], window, fillna=True)
         return rsi[len(rsi) - 1]
 
