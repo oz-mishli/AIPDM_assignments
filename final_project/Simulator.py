@@ -1,23 +1,34 @@
-
+import DataPreparation
+import numpy as np
 
 class Simulator:
-    # TBD fill in functions
-    # TBD define when an episode is done (at 0 account value or another low minimum amount
 
-    def __init__(self):
-        return 0
+    def __init__(self, stock_symbol, start_date, end_date, interval):
+        self.dataSet = DataPreparation.DataPreparation().get_dataset(stock_symbol, start_date, end_date, interval)
+        self.current_state_index = 0
+        self.rng = np.random.default_rng()
 
     def step(self, action):
 
-        next_state = 0
-        reward = 0
-        done = False
+        reward = DataPreparation.DataPreparation().calculate_reward_for_state(self.dataSet[self.current_state_index],
+                                                                              action,
+                                                                              self.dataSet[self.current_state_index + 1])
+        self.current_state_index += 1
+        # If the next state we got to is the final, make sure to return done (i.e. this transition is the last one)
+        if self.current_state_index == len(self.dataSet) - 1:
+            done = True
+        else:
+            done = False
 
-        return next_state, reward, done
+        return self.current_state_index, reward, done
 
     def reset(self):
-        return 0
+
+        self.current_state_index = 0
+        return self.dataSet[self.current_state_index]
 
     def sample_action(self):
-        return 0
+
+        # Return an integer out of {-1,0,1}
+        return self.rng.integers(low=-1, high=2)
 

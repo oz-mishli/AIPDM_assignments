@@ -3,8 +3,7 @@ import torch
 
 import LSTM
 import Simulator
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
+
 
 
 INPUT_SIZE = 7
@@ -131,5 +130,13 @@ class ReplayMemory:
 
     def size(self):
         return self.filled_mem_index
+
+
+if __name__ == '__main__':
+
+    env = Simulator.Simulator('SPY', '2022-01-01', '2022-02-25', '1d')
+
+    first_state = env.reset()
+
 
 
