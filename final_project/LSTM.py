@@ -6,7 +6,7 @@ import torch.optim as opt
 
 class LSTMNetwork(nn.Module):
 
-    def __init__(self, input_size, hidden_size, num_actions, batch_first=False, duelling_network=True):
+    def __init__(self, input_size, hidden_size, num_actions, duelling_network, batch_first=False):
 
         super(LSTMNetwork, self).__init__()
         self.input_size = input_size
@@ -18,15 +18,29 @@ class LSTMNetwork(nn.Module):
         self.lstm_layers = nn.LSTM(input_size, hidden_size, num_layers=2, batch_first=batch_first)
 
         if self.duelling_net:
-            self.V_linear = nn.Linear(input_size, 1, bias=True)
-            self.A_linear = nn.Linear(input_size, self.num_actions)
+            self.V_linear = nn.Linear(hidden_size, 1, bias=True)
+            self.A_linear = nn.Linear(hidden_size, self.num_actions)
         else:
-            self.Q_linear = nn.Linear(input_size, self.num_actions)
+            self.Q_linear = nn.Linear(hidden_size, self.num_actions)
+
+        #self = self.float()
 
     def predict_Q(self, s):
 
+        # Convert the state(s) to a tensor in the matching dimensions before feeding to the LSTM NN
+        in_tensor = torch.from_numpy(s)
+        if len(in_tensor.shape) == 2:
+            if self.batch_first:
+                squeeze_ind = 0
+            else:
+                squeeze_ind = 1
+            in_tensor = torch.unsqueeze(in_tensor, squeeze_ind)
+
         # Take the last hidden state and use it as an input to the next FC layers
-        lstm_output = self.lstm_layers(s)[:, self.hidden_size - 1, :]
+        #lstm_output = self.lstm_layers(s)[:, self.hidden_size - 1, :]
+
+        lstm_output = self.lstm_layers(in_tensor.float())[0][in_tensor.shape[0] - 1, :, :]
+
 
         if self.duelling_net:
             V = torch.nn.functional.leaky_relu(self.V_linear(lstm_output))
@@ -36,7 +50,7 @@ class LSTMNetwork(nn.Module):
         else:
             Q = torch.nn.functional.leaky_relu(self.Q_linear(lstm_output))
 
-        return Q
+        return Q.detach().numpy()
 
 
 def train(model: LSTMNetwork, device, transitions, targets, learning_rate):

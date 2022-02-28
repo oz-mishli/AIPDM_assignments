@@ -1,12 +1,27 @@
 import DataPreparation
 import numpy as np
+import pickle as pkl
+import os.path
+
 
 class Simulator:
 
-    def __init__(self, stock_symbol, start_date, end_date, interval):
-        self.dataSet = DataPreparation.DataPreparation().get_dataset(stock_symbol, start_date, end_date, interval)
+    def __init__(self, ds_fname, stock_symbol, start_date, end_date, interval):
+        self.load_dataset(ds_fname, stock_symbol, start_date, end_date, interval)
         self.current_state_index = 0
         self.rng = np.random.default_rng()
+
+    def load_dataset(self, file_name, stock_symbol, start_date, end_date, interval):
+
+        if os.path.isfile(file_name):
+            with open(file_name, 'rb') as ds_file:
+                out_ds = pkl.load(ds_file)
+        else:
+            out_ds = DataPreparation.DataPreparation().get_dataset(stock_symbol, start_date, end_date, interval)
+            with open(file_name, 'wb') as ds_file:
+                pkl.dump(out_ds, ds_file)
+
+        self.dataSet = out_ds
 
     def step(self, action):
 
@@ -20,12 +35,14 @@ class Simulator:
         else:
             done = False
 
-        return self.current_state_index, reward, done
+        return np.array(self.dataSet[self.current_state_index], dtype=np.float), reward, done
 
     def reset(self):
 
         self.current_state_index = 0
-        return self.dataSet[self.current_state_index]
+
+        # TODO: convert to float may be more efficient at the source when building the dataset
+        return np.array(self.dataSet[self.current_state_index], dtype=np.float)
 
     def sample_action(self):
 

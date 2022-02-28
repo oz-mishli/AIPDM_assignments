@@ -30,7 +30,6 @@ class TechnicalAnalyzer:
         features = np.concatenate((
             np.array([normalized_price]),
             np.array([return_indicator_1_month]),
-            np.array([return_indicator_1_month]),
             np.array([return_indicator_2_month]),
             np.array([return_indicator_3_month]),
             np.array([return_indicator_1_year]),
