@@ -18,7 +18,7 @@ class DataPreparation:
         stock_data = StockDataFetcher.fetch_stock_data(stock_symbol, start_date, end_date, interval)
         technical_features = TechnicalAnalyzer.add_technical_features(stock_data).dropna()
         for index in range(technical_features.shape[0] - DataPreparation.STATE_SIZE):
-            states.append(np.array(technical_features[index:index + DataPreparation.STATE_SIZE]))
+            states.append(np.array(technical_features[index:index + DataPreparation.STATE_SIZE], dtype=float))
 
         return states
 

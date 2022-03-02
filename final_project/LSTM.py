@@ -14,6 +14,7 @@ class LSTMNetwork(nn.Module):
         self.batch_first = batch_first
         self.duelling_net = duelling_network
         self.num_actions = num_actions
+        self.eval()
 
         self.lstm_layers = nn.LSTM(input_size, hidden_size, num_layers=2, batch_first=batch_first)
 
@@ -25,21 +26,26 @@ class LSTMNetwork(nn.Module):
 
         #self = self.float()
 
-    def predict_Q(self, s):
+    def forward(self, s):
+        """
+        Forward pass of the DQN, returning a vector of Q values with a scalar entry for each action
+        :param s: A batch of states as tensor in shape (series length, batch size, num features)
+        :return: a numpy array of Q values with a scalar entry for each action
+        """
 
-        # Convert the state(s) to a tensor in the matching dimensions before feeding to the LSTM NN
-        in_tensor = torch.from_numpy(s)
-        if len(in_tensor.shape) == 2:
-            if self.batch_first:
-                squeeze_ind = 0
-            else:
-                squeeze_ind = 1
-            in_tensor = torch.unsqueeze(in_tensor, squeeze_ind)
+        # # Convert the state(s) to a tensor in the matching dimensions before feeding to the LSTM NN
+        # in_tensor = torch.from_numpy(s)
+        # if len(in_tensor.shape) == 2:
+        #     if self.batch_first:
+        #         squeeze_ind = 0
+        #     else:
+        #         squeeze_ind = 1
+        #     in_tensor = torch.unsqueeze(in_tensor, squeeze_ind)
 
         # Take the last hidden state and use it as an input to the next FC layers
         #lstm_output = self.lstm_layers(s)[:, self.hidden_size - 1, :]
 
-        lstm_output = self.lstm_layers(in_tensor.float())[0][in_tensor.shape[0] - 1, :, :]
+        lstm_output = self.lstm_layers(s)[0][s.shape[0] - 1, :, :]
 
 
         if self.duelling_net:
@@ -50,7 +56,10 @@ class LSTMNetwork(nn.Module):
         else:
             Q = torch.nn.functional.leaky_relu(self.Q_linear(lstm_output))
 
-        return Q.detach().numpy()
+        if self.training:
+            return Q
+        else:
+            return Q.detach().numpy()
 
 
 def train(model: LSTMNetwork, device, transitions, targets, learning_rate):
@@ -71,12 +80,16 @@ def train(model: LSTMNetwork, device, transitions, targets, learning_rate):
     criterion = nn.MSELoss()
     optimizer = opt.Adam(model.parameters(), learning_rate)
 
-    # Load batch date to relevant device (GPU) and reset gradients
-    data, target = transitions.to(device), targets.to(device)
+    # Format batch and transitions data, then load to relevant device (GPU) and reset gradients
+    data = torch.swapaxes(torch.tensor(np.array([i[0] for i in transitions])), 0, 1).to(device)
+    actions = torch.tensor(np.array([j[1] for j in transitions])).to(device) + 1
+    target = torch.tensor(targets).to(device).float()
     optimizer.zero_grad()
 
     # Forward-pass on the batch # TODO make sure all dimensions make sense between input (transitions) and Q output
-    output_Q = model.predict_Q(data)
+    output_Q_vals = model.forward(data.float())
+    #output_Q = torch.index_select(output_Q_vals, 1, actions)
+    output_Q = torch.take(output_Q_vals, actions)
 
     # Compute loss
     loss = criterion(output_Q, target)
@@ -84,7 +97,9 @@ def train(model: LSTMNetwork, device, transitions, targets, learning_rate):
     loss.backward()
     optimizer.step()
 
-    return loss
+    model.eval()
+
+    return loss.item()
 
 
 

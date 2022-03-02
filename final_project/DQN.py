@@ -45,8 +45,25 @@ class DQN:
         if self.rng.uniform(0, 1) < self.epsilon:
             action = self.env.sample_action()  # exploration
         else:
-            action = np.argmax(self.online_network.predict_Q(curr_state))  # greedy
+            action = np.argmax(self.online_network.forward(self.convert_state_to_tensor(curr_state)))  # greedy
         return action
+
+    def convert_state_to_tensor(self, s, batch_first=False):
+
+        # Convert the state(s) to a tensor in the matching dimensions before feeding to the LSTM NN
+        in_tensor = torch.from_numpy(s)
+        if len(in_tensor.shape) == 2:
+            if batch_first:
+                squeeze_ind = 0
+            else:
+                squeeze_ind = 1
+            in_tensor = torch.unsqueeze(in_tensor, squeeze_ind)
+        else:
+            in_tensor = s
+
+        return in_tensor.float()
+
+
 
     def execute_DQN_algorithm(self):
 
@@ -54,6 +71,7 @@ class DQN:
         episodes = 0
         loss_list = []
         done = False
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         while True:
 
@@ -67,24 +85,28 @@ class DQN:
                 next_state, reward, done = self.env.step(action)
                 steps += 1
 
-                self.replay_buffer.add_transition([curr_state, action, reward, next_state, done, 0])
+                self.replay_buffer.add_transition([curr_state, action, reward, next_state, done])
 
                 if self.replay_buffer.size() >= BATCH_SIZE:
 
                     # Sample a batch
                     batch = self.replay_buffer.sample(BATCH_SIZE)
+                    targets_for_batch = []
+                    #batch_for_model = np.zeros(INPUT_SIZE, self.replay_buffer.size())
 
                     for transition in batch:
                         # Determine the label for this action and fill it in the transition
                         if transition[4]: # if DONE
                             label = reward
                         else:
-                            max_action_chosen = np.argmax(self.online_network.predict_Q(next_state))
-                            label = reward + self.gamma * self.target_network.predict_Q(next_state)[:, max_action_chosen]
-                        transition[5] = label
+                            next_state_tensor = self.convert_state_to_tensor(next_state)
+                            max_action_chosen = np.argmax(self.online_network.forward(next_state_tensor))
+                            label = reward + self.gamma * np.squeeze(self.target_network.forward(next_state_tensor)[:, max_action_chosen])
+                        targets_for_batch.append(label)
 
-                    loss = LSTM.train(self.online_network, torch.device, batch, ALPHA)
+                    loss = LSTM.train(self.online_network, device, batch, targets_for_batch, ALPHA)
                     loss_list.append([steps, episodes, loss])
+                    print(f'status = {loss_list[-1]}')
 
                     # Copy weights from online network to target network every tau steps
                     if steps % TAU == 0:
@@ -95,6 +117,7 @@ class DQN:
 
             # Episode is done here
             episodes += 1
+            print('episode is done')
 
             # Stop training when we reach convergence
             if len(loss_list) >= 2:
