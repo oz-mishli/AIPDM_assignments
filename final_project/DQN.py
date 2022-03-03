@@ -13,9 +13,9 @@ TEST_DS_FNAME = 'test_dataset.pkl'
 INPUT_SIZE = 7
 HIDDEN_SIZE = 64
 NUM_ACTIONS = 3
-CONVERGENCE_DELTA = 1e5
+CONVERGENCE_DELTA = 1e-5
 MEM_SIZE = 5000
-BATCH_SIZE = 64
+BATCH_SIZE = 2452
 GAMMA = 0.3
 ALPHA = 0.0001
 TAU = 1000
@@ -40,6 +40,12 @@ class DQN:
 
 
     def choose_act_eps_greedy(self, curr_state):
+        """
+        Method for choosing action according to current state using epsilon greedy. The methods uses the DQN to get the
+        Q value
+        :param curr_state: The current state, i.e. a numpy array of shape [60, 7]
+        :return:  the action chosen out of {-1, 0, 1}
+        """
 
         # Sample phase, choose next step according to epsilon-greedy
         if self.rng.uniform(0, 1) < self.epsilon:
@@ -70,13 +76,17 @@ class DQN:
         steps = 0
         episodes = 0
         loss_list = []
+        mean_reward_list = []
         done = False
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        total_mean_reward = 0
 
         while True:
 
             # Start a new episode
             curr_state = self.env.reset()
+            ep_reward = 0
+            done = False
 
             while not done:
 
@@ -84,6 +94,7 @@ class DQN:
                 action = self.choose_act_eps_greedy(curr_state)
                 next_state, reward, done = self.env.step(action)
                 steps += 1
+                ep_reward += reward
 
                 self.replay_buffer.add_transition([curr_state, action, reward, next_state, done])
 
@@ -92,7 +103,6 @@ class DQN:
                     # Sample a batch
                     batch = self.replay_buffer.sample(BATCH_SIZE)
                     targets_for_batch = []
-                    #batch_for_model = np.zeros(INPUT_SIZE, self.replay_buffer.size())
 
                     for transition in batch:
                         # Determine the label for this action and fill it in the transition
@@ -106,7 +116,8 @@ class DQN:
 
                     loss = LSTM.train(self.online_network, device, batch, targets_for_batch, ALPHA)
                     loss_list.append([steps, episodes, loss])
-                    print(f'status = {loss_list[-1]}')
+                    print(f'total steps = {loss_list[-1][0]}; Total episodes done = {loss_list[-1][1]}, loss = {loss_list[-1][2]}, '
+                          f'total rewards so far = {ep_reward}')
 
                     # Copy weights from online network to target network every tau steps
                     if steps % TAU == 0:
@@ -117,14 +128,18 @@ class DQN:
 
             # Episode is done here
             episodes += 1
-            print('episode is done')
+            total_mean_reward = (total_mean_reward * (episodes - 1) + ep_reward) / (episodes)
+            print(f'Episode {episodes} is done with reward {ep_reward}')
+            print(f'Total mean reward so far is {total_mean_reward}')
+            mean_reward_list.append([ep_reward, total_mean_reward])
+
 
             # Stop training when we reach convergence
-            if len(loss_list) >= 2:
-                if np.abs(loss_list[-1][2] - loss_list[-2][2]) < CONVERGENCE_DELTA:
+            if len(mean_reward_list) >= 2:
+                if np.abs(mean_reward_list[-1][1] - mean_reward_list[-2][1]) < CONVERGENCE_DELTA:
                     break
 
-        return loss_list
+        return mean_reward_list, loss_list
 
 
 class ReplayMemory:

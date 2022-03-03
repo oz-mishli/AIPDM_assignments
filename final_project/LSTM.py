@@ -86,9 +86,8 @@ def train(model: LSTMNetwork, device, transitions, targets, learning_rate):
     target = torch.tensor(targets).to(device).float()
     optimizer.zero_grad()
 
-    # Forward-pass on the batch # TODO make sure all dimensions make sense between input (transitions) and Q output
+    # Forward-pass on the batch
     output_Q_vals = model.forward(data.float())
-    #output_Q = torch.index_select(output_Q_vals, 1, actions)
     output_Q = torch.take(output_Q_vals, actions)
 
     # Compute loss
