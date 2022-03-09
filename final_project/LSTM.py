@@ -24,8 +24,6 @@ class LSTMNetwork(nn.Module):
         else:
             self.Q_linear = nn.Linear(hidden_size, self.num_actions)
 
-        #self = self.float()
-
     def forward(self, s):
         """
         Forward pass of the DQN, returning a vector of Q values with a scalar entry for each action
@@ -33,21 +31,10 @@ class LSTMNetwork(nn.Module):
         :return: a numpy array of Q values with a scalar entry for each action
         """
 
-        # # Convert the state(s) to a tensor in the matching dimensions before feeding to the LSTM NN
-        # in_tensor = torch.from_numpy(s)
-        # if len(in_tensor.shape) == 2:
-        #     if self.batch_first:
-        #         squeeze_ind = 0
-        #     else:
-        #         squeeze_ind = 1
-        #     in_tensor = torch.unsqueeze(in_tensor, squeeze_ind)
-
         # Take the last hidden state and use it as an input to the next FC layers
-        #lstm_output = self.lstm_layers(s)[:, self.hidden_size - 1, :]
-
         lstm_output = self.lstm_layers(s)[0][s.shape[0] - 1, :, :]
 
-
+        # Execute the inference according to whether we use duelling network mode or not
         if self.duelling_net:
             V = torch.nn.functional.leaky_relu(self.V_linear(lstm_output))
             A = torch.nn.functional.leaky_relu(self.A_linear(lstm_output))
@@ -56,6 +43,7 @@ class LSTMNetwork(nn.Module):
         else:
             Q = torch.nn.functional.leaky_relu(self.Q_linear(lstm_output))
 
+        # Different behavior between train and test here
         if self.training:
             return Q
         else:
